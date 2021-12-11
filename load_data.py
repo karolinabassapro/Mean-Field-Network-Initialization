@@ -18,7 +18,7 @@ def load_MNIST():
         transforms.ToTensor(),
         transforms.Normalize((0.1307), (0.3081)),
         # this is approx the mean and std for mnist,
-        # the explicit calculation in the notebook was deleted
+        # the explicit calculation has been deleted
         transforms.Pad(1)
         # this is needed to get proper dimensions in paper
     ])
@@ -53,7 +53,7 @@ def load_CIFAR():
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2470, 0.2435, 0.2616)), 
         # this is approx the mean and std for mnist,
-        # the explicit calculation in the notebook was deleted
+        # the explicit calculation has been deleted
         transforms.Pad(1)
     ])
     
