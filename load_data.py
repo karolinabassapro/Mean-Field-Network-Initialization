@@ -3,6 +3,9 @@ from torch.utils.data import DataLoader, random_split
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 
+batch_size = 500
+num_workers = 8
+
 def load_MNIST():
     """
     Load the MNIST dataset into dataloaders train_loader, val_loader, and test_loader with batch size 1 for SGD.
@@ -25,15 +28,18 @@ def load_MNIST():
     
     classes = ('0', '1', '2', '3','4', '5', '6', '7', '8','9')
     
-    train_data = datasets.MNIST(root = './data', train = True, transform = transform, 
-                            download = True)
-    train_data, val_data = random_split(train_data, [50_000, 10_000], generator=torch.Generator().manual_seed(42))
-    test_data = datasets.MNIST(root = './data', train = False, transform = transform, 
-                            download = True)
+    # load the training data and normalize and pad as above
+    train_data = datasets.MNIST(root = './data', train = True, transform = transform, download = True)
     
-    train_loader = DataLoader(train_data, batch_size = 1, shuffle = True, num_workers = 2)
-    val_loader = DataLoader(val_data, batch_size = 1, shuffle = False, num_workers = 2)
-    test_loader = DataLoader(test_data, batch_size = 1, shuffle = False, num_workers = 2)
+    # split the train data into train-val
+    train_data, val_data = random_split(train_data, [50_000, 10_000], generator=torch.Generator().manual_seed(42))
+
+    test_data = datasets.MNIST(root = './data', train = False, transform = transform, download = True)
+    
+    # move the datasets into dataloaders
+    train_loader = DataLoader(train_data, batch_size = batch_size, shuffle = True, num_workers = num_workers)
+    val_loader = DataLoader(val_data, batch_size = batch_size, shuffle = False, num_workers = num_workers)
+    test_loader = DataLoader(test_data, batch_size = batch_size, shuffle = False, num_workers = num_workers)
     
     return train_loader, val_loader, test_loader, classes
     
@@ -65,8 +71,8 @@ def load_CIFAR():
     test_data = datasets.CIFAR10(root = './data', train = False, transform = transform, 
                             download = True)
     
-    train_loader = DataLoader(train_data, batch_size = 1, shuffle = True, num_workers = 2)
-    val_loader = DataLoader(val_data, batch_size = 1, shuffle = True, num_workers = 2)
-    test_loader = DataLoader(test_data, batch_size = 1, shuffle = False, num_workers = 2)
+    train_loader = DataLoader(train_data, batch_size = batch_size, shuffle = True, num_workers = num_workers)
+    val_loader = DataLoader(val_data, batch_size = batch_size, shuffle = True, num_workers = num_workers)
+    test_loader = DataLoader(test_data, batch_size = batch_size, shuffle = False, num_workers = num_workers)
     
     return train_loader, val_loader, test_loader, classes

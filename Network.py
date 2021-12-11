@@ -1,17 +1,23 @@
-from re import L
-import torch
+import torch, math
 import torch.nn as nn
 import torch.optim as optim
+import numpy as np
 from tqdm import tqdm
+from load_data import batch_size
+
+num_between_report = 10
 
 class base_Conv(nn.Module):
-    def __init__(self, n_channel, n_classes, depth, is_mnist):
+    def __init__(self, n_channel, n_classes, depth, is_mnist, size_1, size_2):
         """
+        This network consists of two rectangular regions before and after the 256th layer of size size_1 and size_2 for before and after the 256th layer respectively. The kernels are all 3x3. This network can take in mnist or cifar10 as controlled by is_mnist.
         Inputs:
             n_channel: int, number of input channels (1 for mnist, 3 for cifar)
             n_classes: int, number of input classes (10 for both mnist and cifar)
             depth: int, number of conv layers
             is_mnist: bool, indicate whether this is mnist or cifar
+            size_1: int, size of first rectangular region
+            size_2: int, size of second rectangular region
         """
         super().__init__()
         if is_mnist:
@@ -22,21 +28,21 @@ class base_Conv(nn.Module):
         self.conv_stack = []
         self.conv1 = nn.Conv2d(n_channel, 64, 3, stride = 1, padding = "same")
         self.conv2 = nn.Conv2d(64, 128, 3, stride = 2)
-        self.conv3 = nn.Conv2d(128, 256, 3, stride = 2, padding = 1)
+        self.conv3 = nn.Conv2d(128, size_1, 3, stride = 2, padding = 1)
         
         if self.depth < 0:
             raise ValueError("Need a positive depth")
         elif self.depth <= 256:
-            self.many_convs1 = nn.ModuleList([nn.Conv2d(256, 256, 3, padding = "same")
+            self.many_convs1 = nn.ModuleList([nn.Conv2d(size_1, size_1, 3, padding = "same")
                                             for i in range(self.depth - 3)])
-            self.num_out_channels = 256
+            self.num_out_channels = size_1
         else:
-            self.many_convs1 = nn.ModuleList([nn.Conv2d(256, 256, 3, padding = "same")
+            self.many_convs1 = nn.ModuleList([nn.Conv2d(size_1, size_1, 3, padding = "same")
                                             for i in range(253)])   
-            self.many_convs2 = nn.Conv2d(256, 128, 3, padding = "same")
-            self.many_convs3 = nn.ModuleList([nn.Conv2d(128, 128, 3, padding = "same")
+            self.many_convs2 = nn.Conv2d(size_1, size_2, 3, padding = "same")
+            self.many_convs3 = nn.ModuleList([nn.Conv2d(size_2, size_2, 3, padding = "same")
                                             for i in range(254, self.depth - 3)])
-            self.num_out_channels = 128
+            self.num_out_channels = size_2
             
         self.fc = nn.Linear(self.num_out_channels * self.dim_helper, n_classes)
 
@@ -72,20 +78,25 @@ def train_step(model, data, label, learning_rate = 0.01, decay = 0, criterion = 
     Returns:
         loss: float
     '''
+    num_right = 0
     
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay = decay)
-    
-    model = model.to(device)
+
     data = data.to(device)
+    labels = label.to(device)
     
     # standard 5 step training
     optimizer.zero_grad()
     out = model(data)
+    with torch.no_grad(): 
+        # calculate the accuracy without touching gradient
+        _, prediction = torch.max(out, 1)
+        num_right += calculate_acc(prediction, label)
     loss = criterion(out, label)
     loss.backward()
     optimizer.step()
     
-    return loss
+    return loss, num_right
 
 def fit(model, epochs, train_loader, learning_rate = 0.01, decay = 0, criterion = nn.CrossEntropyLoss()):
     """
@@ -93,16 +104,62 @@ def fit(model, epochs, train_loader, learning_rate = 0.01, decay = 0, criterion 
 
 
     """
+    k = 0
+    losses = np.zeros(epochs * math.ceil((len(train_loader)/(num_between_report))))
+    accuracy = np.zeros(epochs * math.ceil((len(train_loader)/(num_between_report))))
+
+    model = model.to(device)
     for epoch in tqdm(range(epochs)):
         loss_tracker = 0.0
+        acc_tracker = 0
 
-        for i, data in enumerate(train_loader, 0):
+        model.train()
+
+        for i, data in tqdm(enumerate(train_loader, 0)):
             train_in, label = data
-            loss_tracker += train_step(model, train_in, label, learning_rate, decay, criterion)
+            loss, acc = train_step(model, train_in, label, learning_rate, decay, criterion)
+            loss_tracker += loss
+            acc_tracker += acc
 
-            if i % 1000 == 999:
-                print(f"epoch: {epoch + 1}, image: {i + 1}, loss: {(loss_tracker / 1000)}")
+            # print out running accuracy and loss for every 1000 mini-batches
+            if i % num_between_report == num_between_report - 1:
+                #acc = val_test(val_loader, model)
+                print(f"epoch: {epoch + 1}, image: {i + 1}, loss: {(loss_tracker / num_between_report)}, acc: {(acc_tracker/(num_between_report * batch_size))}")
 
+                losses[k] = loss_tracker / num_between_report
+                accuracy[k] = acc_tracker  / num_between_report
+                k += 1
                 loss_tracker = 0.0
+                acc_tracker = 0
 
     print("Training Done")
+    return losses, accuracy
+
+def val_test(val_loader, model):
+    """
+    Test accuracy on the validation set
+    Inputs:
+        val_loader: dataloader of validation set
+        model: neural network
+    Outputs:
+        acc: float, validation accuracy
+    """
+    num_correct = 0
+    with torch.no_grad():
+        for i, data in enumerate(val_loader, 0):
+            train_in, label = data
+            out = model(train_in)
+            prediction = out.argmax(dim = 1)
+            if prediction == label:
+                num_correct += 1
+    
+    return num_correct/len(val_loader)
+
+def calculate_acc(prediction, labels):
+    """
+    Helper function to calculate the number of correctly predicted labels.
+    Inputs:
+        prediction: torch.tensor, tensor of predictions from network
+        labels: torch.tensor, true labels.
+    """
+    return len(prediction) - torch.count_nonzero(prediction - labels)
