@@ -126,8 +126,8 @@ def fit(model, epochs, train_loader, learning_rate = 0.01, decay = 0, criterion 
                 #acc = val_test(val_loader, model)
                 print(f"epoch: {epoch + 1}, image: {i + 1}, loss: {(loss_tracker / num_between_report)}, acc: {(acc_tracker/(num_between_report * batch_size))}")
 
-                losses[k] = loss_tracker / num_between_report
-                accuracy[k] = acc_tracker  / num_between_report
+                losses[k] = (loss_tracker / num_between_report)
+                accuracy[k] = (acc_tracker  / (num_between_report * batch_size))
                 k += 1
                 loss_tracker = 0.0
                 acc_tracker = 0

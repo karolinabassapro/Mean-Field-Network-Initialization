@@ -48,3 +48,11 @@ def init_xavier(layer):
     """
     if isinstance(layer, nn.Conv2d):
         torch.nn.init.xavier_normal_(layer.weight.data, gain=1.0)
+
+def init_Gaussian(layer):
+    """
+    Helper function which can recursively apply the Gaussian
+     initialization to every layer of a network
+    """
+    if isinstance(layer, nn.Conv2d):
+        torch.nn.init.normal_(layer.weight.data, mean=0, std = math.sqrt(1.0000199997000117/(3*(3))))
