@@ -1,4 +1,4 @@
-# TDL-Initialization-Project
+Mean-Field-Network-Initialization
 
 TODO:
 - Implement function for plotting against other models
