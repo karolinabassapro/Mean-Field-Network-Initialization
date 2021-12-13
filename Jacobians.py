@@ -31,6 +31,7 @@ class Jacobian():
         data.requires_grad_()
         if self.is_square:
             out = self.model(data)[0]
+            self.Jacob_mat = torch.zeros([self.n_classes, len(data.flatten())])
         else:
             out = self.model(data)[0][0]
         

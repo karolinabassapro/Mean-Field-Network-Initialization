@@ -63,6 +63,24 @@ class base_Conv(nn.Module):
         x = self.fc(x)
         return x
 
+
+class test_net(nn.Module):
+    """
+    An extremely simple 'network' for testing
+    """
+    def __init__(self, n_in, n_classes):
+        """
+        A testing class for the Jacobian
+        """
+        super().__init__()
+
+        self.layer1 = nn.Linear(n_in, n_classes)
+
+    def forward(self, x):
+        x = self.layer1(x)
+        return x
+
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def train_step(model, data, label, learning_rate = 0.01, decay = 0, criterion = nn.CrossEntropyLoss()):
@@ -134,6 +152,7 @@ def fit(model, epochs, train_loader, learning_rate = 0.01, decay = 0, criterion 
 
     print("Training Done")
     return losses, accuracy
+
 
 def val_test(val_loader, model):
     """

@@ -8,56 +8,41 @@ import torch.nn as nn
 from numpy import tanh
 from teams import FFNet
 from Jacobians import Jacobian
+from test_tools import *
 
 def main():
-    #load cifar
-    cifar_train, cifar_val, cifar_test, cifar_classes = load_CIFAR()
 
-    # initialize the network with orthogonal weights
-    # orthogonal = base_Conv(n_channel = 3, n_classes = 10, depth = 10, is_mnist = False, size_1 = 16, size_2 = 16)
-    # orthogonal.apply(init_ortho)
-
-    # losses, accuracies = fit(orthogonal, 1, cifar_train, learning_rate= 0.05)
-
-
-
-    # initialize the network with Xavier initialization
-    # xavier = base_Conv(n_channel = 3, n_classes = 10, depth = 10, is_mnist = False, size_1 = 16, size_2 = 16)
-    # xavier.apply(init_xavier)
-
-    # losses2, accuracies2 = fit(xavier, 1, cifar_train, learning_rate= 0.05)
-
-    # Gaussian = base_Conv(n_channel = 3, n_classes = 10, depth = 10, is_mnist = False, size_1 = 16, size_2 = 16)
-    # Gaussian.apply(init_Gaussian)
-
-    # losses3, accuracies3 = fit(Gaussian, 1, cifar_train, learning_rate= 0.05)
-
-    # x = np.arange(len(accuracies))
-    # plt.plot(x, accuracies, label = "Orthogonal accuracies")
-    # plt.plot(x, accuracies2, label = "Xavier accuracies")
-    # plt.plot(x, accuracies3, label = "Gaussian accuracies")
-    # plt.legend()
-    # plt.show()
-
-    n = 50
+    n = 100
+    Q = 2
     
     mf = MeanField(math.tanh, d_tanh)
-    h_0 = mf.get_h0(2, 28).flatten()
+    h_0 = mf.get_h0(Q, 28).flatten()
 
     Jacobians = torch.zeros([n, 10, 784])
     max_sv = torch.zeros(n)
 
+    init = Initialization("Conv",  784 ,name='gaussian', q = Q, activation = 'tanh')
 
-    for Depth in range(n):
-        Net = FFNet(784, 10, 784, Depth)
-        Net.apply(init_Gaussian)
+    # for Depth in tqdm(range(n)):
+    #     Net = FFNet(784, 10, 784, Depth)
+    #     Net.apply(init)
 
-        Net_Jacobian = Jacobian(10, False, Net)
-        Jacobians[Depth, :, :] = Net_Jacobian(h_0)
-        max_sv[Depth] = torch.max(Net_Jacobian.SingVals())
+    #     Net_Jacobian = Jacobian(10, False, Net)
+    #     Jacobians[Depth, :, :] = Net_Jacobian(h_0)
+    #     # print("Jacobian: ", Jacobians[Depth, :, :])
+    #     max_sv[Depth] = torch.max(Net_Jacobian.SingVals())
+
+    Net = test_net(784, 10)
+    Net.apply(init)
+
+    Net_Jacobian = Jacobian(10, False, Net)
+    Net_Jacobian(h_0)
+    singvals = Net_Jacobian.SingVals()
+
+    print(torch.mean(singvals))
 
     x = np.arange(0, n)
-    plt.plot(x, max_sv)
+    plt.hist(singvals,bins = 3)
     plt.show()
 
 
