@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from scipy.stats import norm
 from scipy.integrate import quad
 import matplotlib.pyplot as plt
@@ -32,6 +33,8 @@ class MeanField():
 
     def get_noise_and_var(self, q, chi):
         """
+        get the variance (sigma^2) for the gaussian init of
+        weight matrices (sw) and biases (sb)
         setting chi = 1 will give the critical line
         returns the critical line of sigmaw and sigmab
         """
@@ -39,6 +42,13 @@ class MeanField():
         sw = chi/quad(self.chi_1_pdf, -np.inf, np.inf, args= (q))[0]
         sb = q - sw * quad(self.q_pdf, -np.inf, np.inf, args= (q))[0]
         return sw, sb
+
+    def get_h0(self, q, n):
+        if n <= 0:
+            raise ValueError("Need dimension > 0")
+        h0 = np.eye(n)
+        return torch.tensor(np.sqrt(q)/n * h0)
+        
 
     def plot(self):
         """

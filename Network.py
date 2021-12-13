@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 from load_data import batch_size
 
-num_between_report = 10
+num_between_report = 2
 
 class base_Conv(nn.Module):
     def __init__(self, n_channel, n_classes, depth, is_mnist, size_1, size_2):

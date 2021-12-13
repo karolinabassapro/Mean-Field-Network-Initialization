@@ -1,6 +1,10 @@
 import torch, math
 from scipy.stats import ortho_group
 import torch.nn as nn
+from MeanField import *
+
+name = "hard_tanh"
+q = 10
 
 def delta_orthogonal(tensor, gain=1.):
     """
@@ -51,8 +55,28 @@ def init_xavier(layer):
 
 def init_Gaussian(layer):
     """
+    name = "relu", "tanh", or "hard_tanh"
     Helper function which can recursively apply the Gaussian
      initialization to every layer of a network
     """
+    if name not in ("relu", "tanh", "hard_tanh"):
+        raise ValueError("say 'relu', 'tanh', or 'hard_tanh' only")
+    if name == "relu":
+        phi = lambda x: np.maximum(x, 0.0)
+        d_phi = lambda x: (x > 0).astype("int")
+        mf = MeanField(phi, d_phi)
+        sw, sb = mf.get_noise_and_var(q, 1)
+    elif name == "tanh":
+        phi = math.tanh
+        d_phi = d_tanh
+        mf = MeanField(phi, d_phi)
+        sw, sb = mf.get_noise_and_var(q, 1)
+    else:
+        phi = lambda x: np.maximum(-1.0, np.minimum(1.0, x))
+        d_phi = lambda x: np.logical_and(x > -1.0, x < 1.0).astype("int")
+        mf = MeanField(phi, d_phi)
+        sw, sb = mf.get_noise_and_var(q, 1)
+
     if isinstance(layer, nn.Conv2d):
-        torch.nn.init.normal_(layer.weight.data, mean=0, std = math.sqrt(1.0000199997000117/(3*(3))))
+        torch.nn.init.normal_(layer.weight.data, mean=0, std = math.sqrt(sw/1024))
+        torch.nn.init.normal_(layer.bias, mean = 0, std = math.sqrt(sb/1024))
