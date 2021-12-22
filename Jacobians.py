@@ -5,7 +5,7 @@ class Jacobian():
     """
     Class for Jacobian of a given model. Once the class is instantiated with a given model it can be called on input data to return the Jacobian wrt that input data. Everything is done in double precision.
     """
-    def __init__(self, n_classes, is_square, model):
+    def __init__(self, model, n_classes = 10, is_square = True):
         """
         Inputs:
             n_classes: int, number of classes
@@ -24,7 +24,9 @@ class Jacobian():
         """
         self.Jacob_mat = torch.zeros([self.n_classes, len(data)])
         # may need ot use data.shape[1] instead
+
         data = data[None, None, ...].double()
+        
         # NNs expect a tensor of length 4 the first index is batch
         # size, second is num channels.
         # Should change the second None here to n_channels

@@ -1,184 +1,98 @@
-import torch, math
+import torch
 import torch.nn as nn
-import torch.optim as optim
-import numpy as np
-from tqdm import tqdm
-from load_data import batch_size
-
-num_between_report = 2
-
-class base_Conv(nn.Module):
-    def __init__(self, n_channel, n_classes, depth, is_mnist, size_1, size_2):
-        """
-        This network consists of two rectangular regions before and after the 256th layer of size size_1 and size_2 for before and after the 256th layer respectively. The kernels are all 3x3. This network can take in mnist or cifar10 as controlled by is_mnist.
-        Inputs:
-            n_channel: int, number of input channels (1 for mnist, 3 for cifar)
-            n_classes: int, number of input classes (10 for both mnist and cifar)
-            depth: int, number of conv layers
-            is_mnist: bool, indicate whether this is mnist or cifar
-            size_1: int, size of first rectangular region
-            size_2: int, size of second rectangular region
-        """
+import Init_specifications as IS
+class ff_net(nn.Module):
+    def __init__(self, layer_gen, hidden_width, in_width, n_classes = 10, init_type = "orthogonal", bias = True):
+        if init_type not in ["orthogonal", "gaussian", "xavier"]:
+            print("Unsupported Init")
+            init_type = "gaussian"
         super().__init__()
-        if is_mnist:
-            self.dim_helper = 7 * 7
-        else:
-            self.dim_helper = 8 * 8
-        self.depth = depth
-        self.conv_stack = []
-        self.conv1 = nn.Conv2d(n_channel, 64, 3, stride = 1, padding = "same")
-        self.conv2 = nn.Conv2d(64, 128, 3, stride = 2)
-        self.conv3 = nn.Conv2d(128, size_1, 3, stride = 2, padding = 1)
-        
-        if self.depth < 0:
-            raise ValueError("Need a positive depth")
-        elif self.depth <= 256:
-            self.many_convs1 = nn.ModuleList([nn.Conv2d(size_1, size_1, 3, padding = "same")
-                                            for i in range(self.depth - 3)])
-            self.num_out_channels = size_1
-        else:
-            self.many_convs1 = nn.ModuleList([nn.Conv2d(size_1, size_1, 3, padding = "same")
-                                            for i in range(253)])   
-            self.many_convs2 = nn.Conv2d(size_1, size_2, 3, padding = "same")
-            self.many_convs3 = nn.ModuleList([nn.Conv2d(size_2, size_2, 3, padding = "same")
-                                            for i in range(254, self.depth - 3)])
-            self.num_out_channels = size_2
-            
-        self.fc = nn.Linear(self.num_out_channels * self.dim_helper, n_classes)
+        self.layer_gen = layer_gen
+        self.linear = nn.Linear(hidden_width, n_classes)
+
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                if init_type == "orthogonal":
+                    m.weight = IS.orthogonal(m.weight)
+                    if bias:
+                        m.bias = IS.gauss_bias(m.bias)
+                elif init_type == "gaussian":
+                    m.weight = IS.gaussian(m.weight, hidden_width)
+                    if bias:
+                        m.bias= IS.gauss_bias(m.bias)
+                else:
+                    nn.init.xavier_normal_(m.weight)
+
 
     def forward(self, x):
-        x = torch.tanh(self.conv1(x))
-        x = torch.tanh(self.conv2(x))
-        x = torch.tanh(self.conv3(x))
-        if self.depth <= 256:
-            for i, layer in enumerate(self.many_convs1):
-                x = torch.tanh(layer(x))
-        else:
-            for i, layer in enumerate(self.many_convs1):
-                x = torch.tanh(layer(x))
-            x = torch.tanh(self.many_convs2(x))
-            for i, layer in enumerate(self.many_convs3):
-                x = torch.tanh(layer(x))
-        x = torch.flatten(x, 1) # flatten all dimensions except batch
+        x = self.layer_gen(x)
+        x = x.view(x.size(0), -1)
+        x = self.linear(x)
+        return x
+
+class conv_net(nn.Module):
+    def __init__(self, layer_gen, hidden_channels, in_channels, n_classes = 10, init_type = "orthogonal"):
+        if init_type not in ["orthogonal", "xavier"]:
+            print("Unsupported init")
+            init_type = "orthogonal"
+        super(conv_net, self).__init__()
+        self.layer_gen = layer_gen
+        self.fc = nn.Linear(hidden_channels, n_classes)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                if init_type == "orthogonal":
+                    m.weight = IS.delta_orthogonal(m.weight)
+                    m.bias = IS.gauss_bias(m.bias)
+                else:
+                    nn.init.xavier_normal_(m.weight)
+    
+    def forward(self, x):
+        x = self.layer_gen(x)
+        x = x.view(x.size(0), -1)
         x = self.fc(x)
         return x
 
+def make_conv(depth, in_channels):
+    assert isinstance(depth, int)
+    hidden_channels = 256 if depth <= 256 else 128
+    layers = []
+    for stride in [1,2,2]:
+        conv2d = nn.Conv2d(in_channels, hidden_channels, kernel_size=3, padding=1, stride = stride)
+        layers += [conv2d, nn.Tanh()]
+        in_channels = hidden_channels
+    for _ in range(depth):
+        conv2d = nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, padding=1)
+        layers += [conv2d, nn.Tanh()]
+    layers += [nn.AvgPool2d(8)] # 7 for mnist
+    return nn.Sequential(*layers), hidden_channels
 
-class test_net(nn.Module):
-    """
-    An extremely simple 'network' for testing
-    """
-    def __init__(self, n_in, n_classes):
-        """
-        A testing class for the Jacobian
-        """
-        super().__init__()
+def make_linear(depth, in_width):
+    hidden_width = 512 if depth < 256 else 256
+    layers = []
+    linear = nn.Linear(in_width, hidden_width, bias = True)
+    layers += [linear, nn.Tanh()]
+    for _ in range(depth):
+        linear = nn.Linear(hidden_width, hidden_width, bias = True)
+        layers += [linear, nn.Tanh()]
+    return nn.Sequential(*layers), hidden_width
 
-        self.layer1 = nn.Linear(n_in, n_classes)
+def conv_32(**kwargs):
+    model = conv_net(*make_conv(32, 1), **kwargs)
+    return model
 
-    def forward(self, x):
-        x = self.layer1(x)
-        return x
+def linear_32(**kwargs):
+    model = ff_net(*make_linear(32, 900), **kwargs)
+    return model
 
+def linear_128(**kwargs):
+    model = ff_net(*make_linear(128, 900), **kwargs)
+    return model
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def linear_512(**kwargs):
+    model = ff_net(*make_linear(512, 900), **kwargs)
+    return model
 
-def train_step(model, data, label, learning_rate = 0.01, decay = 0, criterion = nn.CrossEntropyLoss()):
-    '''
-    Train one step for classification using SGD
-    Inputs:
-        model: NN
-        data: torch.tensor, features of single training sample
-        learning_rate: float,
-        decay: float,
-        criterion: torch.nn loss function
-
-    Returns:
-        loss: float
-    '''
-    num_right = 0
-    
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate, weight_decay = decay)
-
-    data = data.to(device)
-    labels = label.to(device)
-    
-    # standard 5 step training
-    optimizer.zero_grad()
-    out = model(data)
-    with torch.no_grad(): 
-        # calculate the accuracy without touching gradient
-        _, prediction = torch.max(out, 1)
-        num_right += calculate_acc(prediction, label)
-    loss = criterion(out, label)
-    loss.backward()
-    optimizer.step()
-    
-    return loss, num_right
-
-def fit(model, epochs, train_loader, learning_rate = 0.01, decay = 0, criterion = nn.CrossEntropyLoss()):
-    """
-    Fit model and print out loss updates every 1000 training steps.
-
-
-    """
-    k = 0
-    losses = np.zeros(epochs * math.ceil((len(train_loader)/(num_between_report))))
-    accuracy = np.zeros(epochs * math.ceil((len(train_loader)/(num_between_report))))
-
-    model = model.to(device)
-    for epoch in tqdm(range(epochs)):
-        loss_tracker = 0.0
-        acc_tracker = 0
-
-        model.train()
-
-        for i, data in tqdm(enumerate(train_loader, 0)):
-            train_in, label = data
-            loss, acc = train_step(model, train_in, label, learning_rate, decay, criterion)
-            loss_tracker += loss
-            acc_tracker += acc
-
-            # print out running accuracy and loss for every 1000 mini-batches
-            if i % num_between_report == num_between_report - 1:
-                #acc = val_test(val_loader, model)
-                print(f"epoch: {epoch + 1}, image: {i + 1}, loss: {(loss_tracker / num_between_report)}, acc: {(acc_tracker/(num_between_report * batch_size))}")
-
-                losses[k] = (loss_tracker / num_between_report)
-                accuracy[k] = (acc_tracker  / (num_between_report * batch_size))
-                k += 1
-                loss_tracker = 0.0
-                acc_tracker = 0
-
-    print("Training Done")
-    return losses, accuracy
-
-
-def val_test(val_loader, model):
-    """
-    Test accuracy on the validation set
-    Inputs:
-        val_loader: dataloader of validation set
-        model: neural network
-    Outputs:
-        acc: float, validation accuracy
-    """
-    num_correct = 0
-    with torch.no_grad():
-        for i, data in enumerate(val_loader, 0):
-            train_in, label = data
-            out = model(train_in)
-            prediction = out.argmax(dim = 1)
-            if prediction == label:
-                num_correct += 1
-    
-    return num_correct/len(val_loader)
-
-def calculate_acc(prediction, labels):
-    """
-    Helper function to calculate the number of correctly predicted labels.
-    Inputs:
-        prediction: torch.tensor, tensor of predictions from network
-        labels: torch.tensor, true labels.
-    """
-    return len(prediction) - torch.count_nonzero(prediction - labels)
+def linear_1024(**kwargs):
+    model = ff_net(*make_linear(1024, 900), **kwargs)
+    return model

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 def base_test(tensor, gain = 1):
     """
@@ -26,10 +27,10 @@ class test_net(nn.Module):
         """
         super().__init__()
 
-        self.layer1 = nn.Linear(n_in, n_in)
-        self.layer2 = nn.Linear(n_in, n_classes)
+        self.layer1 = nn.Linear(n_in, n_classes)
+        self.layer2 = nn.Linear(n_classes, n_classes)
 
     def forward(self, x):
-        x = torch.tanh(self.layer1(x))
+        x = F.tanh(self.layer1(x))
         x = self.layer2(x)
         return x

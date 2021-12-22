@@ -1,57 +1,53 @@
 from typing import Optional
+from numpy.random import normal
+import numpy as np
 import torch, math
 from scipy.stats import ortho_group
 import torch.nn as nn
 from MeanField import *
 
-class Initialization():
-    def __init__(self, net_style, in_size_or_channels, q = 2, name = 'xavier', activation = 'tanh'):
-        """
-        This class allows for each type of initialization to be called for each type of activation function for both convolutional nets and feedforward nets. This was created in order to avoid errors when changing from one style of net to another, as was happening frequently.
-        Inputs:
-            net_style: str, "Conv" or "FF" to indicate whether to change the initialization of the convolutional or feedforward layers
+def gaussian(tensor, hidden_width):
+    mf = MeanField(math.tanh,d_tanh)
+    sw, sb = mf.get_noise_and_var(0, 1)
+    std = math.sqrt(sw/hidden_width)
+    mean = torch.zeros([tensor.shape[0], tensor.shape[1]])
 
-            in_size_or_channels: int, the number of inputs in the FF case, or the number of channels times the width of the filter in the convolutional case (9 for this CNN)
+    tensor = torch.normal(mean, torch.ones([tensor.shape[0], tensor.shape[1]]))
+    tensor *= std
 
-            q: float, q parameterizes the critical line of weights and biases for both FF and Conv neural networks. See [https://arxiv.org/abs/1802.09979]
+    return torch.nn.Parameter(tensor)
 
-            name: str, either xavier, gaussian, or orthogonal for which type of initialization is desired.
+def gauss_bias(tensor):
+    mf = MeanField(math.tanh,d_tanh)
+    sw, sb = mf.get_noise_and_var(0, 1)
+    std = torch.ones(tensor.shape[0])
+    mean = torch.zeros(tensor.shape[0])
+    std *= math.sqrt(sb)
 
-            activation: str, either tanh, relu, or hard_tanh
-        """
-        if name not in ("xavier", "gaussian", "orthogonal"):
-            raise ValueError("Only xavier, gaussian, and orthogonal inits are suppported")
-        elif activation not in ("tanh", "relu", "hard_tanh"):
-            raise ValueError("Only tanh, relu, and hard_tanh activations are supported")
-        elif net_style not in ("Conv, FF"):
-            raise ValueError("Only Conv and FF are supported")
+    tensor = torch.nn.Parameter(torch.normal(mean, std))
 
-        self.q = q
-        self.activation = activation
-        self.ins = in_size_or_channels
-        self.bias = False
+    return tensor
 
-        if net_style == "Conv":
-            self.layer_type = nn.Conv2d
-        else:
-            self.layer_type = nn.Linear
-            if name == "Orthogonal":
-                raise Exception("Orthogonal Init doesn't work with FF Net")
+def orthogonal(tensor):
+    mf = MeanField(math.tanh,d_tanh)
+    sw, sb = mf.get_noise_and_var(0, 1)
 
-        if name == "Orthogonal":
-            self.init_type = self.delta_orthogonal
-        elif name == "gaussian":
-            self.init_type = self.Gaussian
-        else:
-            self.init_type = torch.nn.init.xavier_normal_
+    bigger = max(tensor.shape[0], tensor.shape[1])
 
-    def __call__(self, layer):
-        if isinstance(layer, self.layer_type):
-            layer.weight.data = self.init_type(layer.weight.data)
-            if self.bias == True:
-                layer.bias.data = self.init_type(layer.bias.data)
+    q = torch.tensor(ortho_group.rvs(bigger))
 
-    def delta_orthogonal(self, tensor, gain=1.):
+    if tensor.size(0) > tensor.size(1):
+        q = q[:, :tensor.size(1)]
+    elif tensor.size(1) > tensor.size(0):
+        q = q[:tensor.size(0), :]
+
+    q *= math.sqrt(sw)
+
+    tensor = torch.nn.Parameter(q.float())
+    return tensor
+
+
+def delta_orthogonal(tensor, gain = 1):
         """
         Generate delta orthogonal kernel for cnn. Weight tensor should be
         out channel x in channel x 3 x 3. Following algorithm 2 in: https://arxiv.org/abs/1806.05393
@@ -61,92 +57,39 @@ class Initialization():
         out:
             tensor: output random init
         """
-        self.bias = False
-        if tensor.shape[3] != 3:
-            print(tensor.shape)
-            raise ValueError("tensor should be 3 dim")
+
+        if tensor.ndimension() < 3 or tensor.ndimension() > 5:
+            raise ValueError("The tensor to initialize must be at least "
+                       "three-dimensional and at most five-dimensional")
     
-        # generate random ortho matrix
+        if tensor.size(1) > tensor.size(0):
+            raise ValueError("In_channels cannot be greater than out_channels.")
+        
+        # Generate a random matrix
+        # a = tensor.new(tensor.size(0), tensor.size(0)).normal_(0, 1)
+        # # Compute the qr factorization
+        # q, r = torch.qr(a)
+        # # Make Q uniform
+        # d = torch.diag(r, 0)
+        # q *= d.sign()
+        # q = q[:, :tensor.size(1)]
         bigger = max(tensor.size(0), tensor.size(1))
-        H = torch.tensor(ortho_group.rvs(bigger))
+        q = torch.tensor(ortho_group.rvs(bigger))
     
         # cut H to the appropriate size
         if tensor.size(0) > tensor.size(1):
-            H = H[:, :tensor.size(1)]
+            q = q[:, :tensor.size(1)]
         elif tensor.size(1) > tensor.size(0):
-            H = H[:tensor.size(0), :]
-
-        # set the initialization
+            q = q[:tensor.size(0), :]
         with torch.no_grad():
             tensor.zero_()
-            tensor[:,:,(tensor.size(2)-1)//2, (tensor.size(2)-1)//2] = H
+            if tensor.ndimension() == 3:
+                tensor[:, :, (tensor.size(2)-1)//2] = q
+            elif tensor.ndimension() == 4:
+                tensor[:, :, (tensor.size(2)-1)//2, (tensor.size(3)-1)//2] = q
+            else:
+                tensor[:, :, (tensor.size(2)-1)//2, (tensor.size(3)-1)//2, (tensor.size(4)-1)//2] = q
             tensor.mul_(math.sqrt(gain))
+            tensor = torch.nn.Parameter(tensor)
         return tensor
-
-
-    def Gaussian(self, tensor):
-        sw, sb = self.Gauss_compute()
-        tensor.zero_()
-        if not self.bias:
-            tensor = torch.normal(torch.zeros(tensor.shape), torch.sqrt(sw/self.ins * torch.ones(tensor.shape)))
-        else:
-            tensor = torch.normal(torch.zeros(tensor.shape), torch.sqrt(sb/self.ins * torch.ones(tensor.shape)))
-
-        self.bias = True
-        return tensor
-
-    def Gauss_compute(self):
-        if self.activation == "relu":
-            phi = lambda x: np.maximum(x, 0.0)
-            d_phi = lambda x: (x > 0).astype("int")
-            mf = MeanField(phi, d_phi)
-            sw, sb = mf.get_noise_and_var(self.q, 1)
-        elif self.activation == "tanh":
-            phi = math.tanh
-            d_phi = d_tanh
-            mf = MeanField(phi, d_phi)
-            sw, sb = mf.get_noise_and_var(self.q, 1)
-        else:
-            phi = lambda x: np.maximum(-1.0, np.minimum(1.0, x))
-            d_phi = lambda x: np.logical_and(x > -1.0, x < 1.0).astype("int")
-            mf = MeanField(phi, d_phi)
-            sw, sb = mf.get_noise_and_var(self.q, 1)
-        return sw, sb
-
         
-
-# def init_xavier(layer):
-#     """
-#     Helper function which can recursively apply the Xavier
-#     initialization to every layer of a network
-#     """
-#     if isinstance(layer, nn.Conv2d):
-#        layer.weight.data = torch.nn.init.xavier_normal_(layer.weight.data, gain=1.0)
-
-# def init_Gaussian(layer):
-#     """
-#     name = "relu", "tanh", or "hard_tanh"
-#     Helper function which can recursively apply the Gaussian
-#      initialization to every layer of a network
-#     """
-#     if name not in ("relu", "tanh", "hard_tanh"):
-#         raise ValueError("say 'relu', 'tanh', or 'hard_tanh' only")
-#     if name == "relu":
-#         phi = lambda x: np.maximum(x, 0.0)
-#         d_phi = lambda x: (x > 0).astype("int")
-#         mf = MeanField(phi, d_phi)
-#         sw, sb = mf.get_noise_and_var(q, 1)
-#     elif name == "tanh":
-#         phi = math.tanh
-#         d_phi = d_tanh
-#         mf = MeanField(phi, d_phi)
-#         sw, sb = mf.get_noise_and_var(q, 1)
-#     else:
-#         phi = lambda x: np.maximum(-1.0, np.minimum(1.0, x))
-#         d_phi = lambda x: np.logical_and(x > -1.0, x < 1.0).astype("int")
-#         mf = MeanField(phi, d_phi)
-#         sw, sb = mf.get_noise_and_var(q, 1)
-
-#     if isinstance(layer, nn.Conv2d):
-#         layer.weight.data = torch.nn.init.normal_(layer.weight.data, mean=0, std = math.sqrt(sw/784))
-#         layer.bias.data = torch.nn.init.normal_(layer.bias.data, mean = 0, std = math.sqrt(sb/784))

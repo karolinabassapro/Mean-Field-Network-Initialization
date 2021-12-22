@@ -9,6 +9,18 @@ def d_tanh(x):
     """Derivative of tanh."""
     return 1./ np.cosh(x)**2
 
+def relu(x):
+    return np.maximum(x, 0.0)
+
+def d_relu(x):
+    return (x > 0).astype("int")
+
+def hard_tanh(x):
+    return np.maximum(-1.0, np.minimum(1.0, x))
+
+def d_hard_tanh(x):
+    return np.logical_and(x > -1.0, x < 1.0).astype("int")
+
 class MeanField():
     """
     We closely follow the Xiao CNN paper and code here
@@ -43,11 +55,15 @@ class MeanField():
         sb = q - sw * quad(self.q_pdf, -np.inf, np.inf, args= (q))[0]
         return sw, sb
 
-    def get_h0(self, q, n):
+    def get_h0(self, q, n, width):
         if n <= 0:
             raise ValueError("Need dimension > 0")
-        h0 = np.eye(n)
-        return torch.tensor(np.sqrt(q)/n * h0)
+        h0 = np.eye(n)/np.sqrt(n)
+        return torch.tensor(np.sqrt(q)*np.sqrt(width) * h0)
+
+    def check(self, q):
+        sw, sb = self.get_noise_and_var(q, 1)
+        return sw * quad(self.q_pdf, -np.inf, np.inf, args = (q))[0] + sb
         
 
     def plot(self):
