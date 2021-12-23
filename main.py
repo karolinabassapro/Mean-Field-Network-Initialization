@@ -21,25 +21,33 @@ def main():
     # print(np.mean(singvals))
 
     train_loader, val_loader, test_loader, classes = load_MNIST()
-
+    print("1")
     num_runs = 10
     val_accs = pd.DataFrame(index=np.arange(num_runs), columns=["Gauss_val_accs","Xavier_val_accs","Ortho_val_accs"])
+    print("2")
 
     for i in range(num_runs):
-        gauss = linear_net(depth = 32, in_dim = 900, in_width = 900, init_type = "gaussian")
-        xavier = linear_net(depth = 32, in_dim = 900, in_width = 900, init_type = "xavier")
-        orthogonal = linear_net(depth = 32, in_dim = 900, in_width = 900, init_type = "orthogonal")
-
+        print("3")
+        gauss = linear_net(depth = 128, in_dim = 900, in_width = 900, init_type = "gaussian")
+        print("4")
+        xavier = linear_net(depth = 128, in_dim = 900, in_width = 900, init_type = "xavier")
+        print("5")
+        orthogonal = linear_net(depth = 128, in_dim = 900, in_width = 900, init_type = "orthogonal")
+        print("6")
         df = pd.DataFrame(index=np.arange(40), columns=      ["Gauss_train_accs", "Xavier_train_accs",  "Ortho_train_accs"])
 
         _, accs_g = fit(gauss, 2, train_loader)
+        print("7")
         _, accs_z = fit(xavier, 2, train_loader)
+        print("8")
         _, accs_o = fit(orthogonal, 2, train_loader)
+        print("9")
 
         for j in range(40):
             df.loc[j, "Gauss_train_accs"] = accs_g[j]
             df.loc[j, "Xavier_train_accs"] = accs_z[j]
             df.loc[j, "Ortho_train_accs"] = accs_o[j]
+        print("grapes")
 
         val_accs.loc[i,"Gauss_val_accs"] = val_test(val_loader, gauss).item()
         val_accs.loc[i,"Xavier_val_accs"] = val_test(val_loader, xavier).item()

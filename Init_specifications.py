@@ -31,18 +31,16 @@ def gauss_bias(tensor):
 def orthogonal(tensor):
     mf = MeanField(math.tanh,d_tanh)
     sw, sb = mf.get_noise_and_var(0, 1)
-
     bigger = max(tensor.shape[0], tensor.shape[1])
-
-    q = torch.tensor(ortho_group.rvs(bigger))
-
+    a = tensor.new(bigger, bigger).normal_(0,1)
+    q, r = torch.qr(a)
+    d = torch.diag(r, 0)
+    q *= d.sign()
     if tensor.size(0) > tensor.size(1):
         q = q[:, :tensor.size(1)]
     elif tensor.size(1) > tensor.size(0):
         q = q[:tensor.size(0), :]
-
     q *= math.sqrt(sw)
-
     tensor = torch.nn.Parameter(q.float())
     return tensor
 

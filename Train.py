@@ -37,7 +37,7 @@ def train_step(model, data, label, learning_rate = 0.01, decay = 0, criterion = 
         # calculate the accuracy without touching gradient
         _, prediction = torch.max(out, 1)
         num_right += calculate_acc(prediction, label)
-    loss = criterion(out, label)
+    loss = criterion(out, labels)
     loss.backward()
     optimizer.step()
     
@@ -64,6 +64,7 @@ def fit(model, epochs, train_loader, learning_rate = 0.01, decay = 0, criterion 
             train_in, label = data
             # flatten layers except batch
             train_in = torch.flatten(train_in, start_dim = 1)
+            train_in = train_in.to(device)
             loss, acc = train_step(model, train_in, label, learning_rate, decay, criterion)
             loss_tracker += loss
             acc_tracker += acc
@@ -96,6 +97,7 @@ def val_test(val_loader, model):
         for i, data in enumerate(val_loader, 0):
             train_in, label = data
             train_in = torch.flatten(train_in, start_dim = 1)
+            train_in = train_in.to(device)
             out = model(train_in)
             # calculate the accuracy without touching gradient
             _, prediction = torch.max(out, 1)
@@ -111,4 +113,8 @@ def calculate_acc(prediction, labels):
         prediction: torch.tensor, tensor of predictions from network
         labels: torch.tensor, true labels.
     """
-    return len(prediction) - torch.count_nonzero(prediction - labels)
+    prediction = prediction.to(device)
+    labels = labels.to(device)
+    with torch.no_grad():
+        acc = len(prediction) - torch.count_nonzero(prediction - labels)
+    return acc
