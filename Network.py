@@ -81,18 +81,22 @@ def conv_32(**kwargs):
     model = conv_net(*make_conv(32, 1), **kwargs)
     return model
 
-def linear_32(**kwargs):
-    model = ff_net(*make_linear(32, 900), **kwargs)
+def linear_net(depth, in_dim, **kwargs):
+    model = ff_net(*make_linear(depth, in_dim), **kwargs)
     return model
 
 def linear_128(**kwargs):
-    model = ff_net(*make_linear(128, 900), **kwargs)
+    model = ff_net(*make_linear(128, 3468), **kwargs)
+    return model
+
+def linear_256(**kwargs):
+    model = ff_net(*make_linear(256, 3468), **kwargs)
     return model
 
 def linear_512(**kwargs):
-    model = ff_net(*make_linear(512, 900), **kwargs)
+    model = ff_net(*make_linear(512, 3468), **kwargs)
     return model
 
 def linear_1024(**kwargs):
-    model = ff_net(*make_linear(1024, 900), **kwargs)
+    model = ff_net(*make_linear(1024, 3468), **kwargs)
     return model

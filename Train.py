@@ -91,16 +91,18 @@ def val_test(val_loader, model):
     Outputs:
         acc: float, validation accuracy
     """
-    num_correct = 0
+    num_right = 0
     with torch.no_grad():
         for i, data in enumerate(val_loader, 0):
             train_in, label = data
+            train_in = torch.flatten(train_in, start_dim = 1)
             out = model(train_in)
+            # calculate the accuracy without touching gradient
+            _, prediction = torch.max(out, 1)
+            num_right += calculate_acc(prediction, label)
             prediction = out.argmax(dim = 1)
-            if prediction == label:
-                num_correct += 1
     
-    return num_correct/len(val_loader)
+    return num_right/len(val_loader)
 
 def calculate_acc(prediction, labels):
     """
